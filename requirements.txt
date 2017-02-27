@@ -1,0 +1,6 @@
+# sql support
+SQLAlchemy
+
+# firebase rest support: https://github.com/ozgur/python-firebase
+requests
+python-firebase
