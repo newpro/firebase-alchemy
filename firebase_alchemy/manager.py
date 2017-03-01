@@ -102,5 +102,5 @@ class ModelManager(object):
         self.adaptor.session.delete(model_instance)
         self.adaptor.session.commit()
 
-    def fire_path(self, model_instance):
+    def get_path(self, model_instance):
         return _getpath(self.firepath, model_instance.fireid)
