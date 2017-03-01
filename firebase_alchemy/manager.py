@@ -22,6 +22,14 @@ class Adaptor(object):
     def _map(self, table_name, firepath):
         self.maps[table_name] = firepath
 
+def _getpath(fire_path, fire_id):
+    """Give a path and id, merge them together.
+    """
+    if fire_path[-1:] == '/':
+        return path + fire_id
+    else:
+        return path + '/' + fire_id
+
 class ModelManager(object):
     """DB operations sheilding
     """
@@ -84,16 +92,15 @@ class ModelManager(object):
             except:
                 raise Exception('Wrong payload format: p:{}, v:{}'.format(payload, self.validator))
         # calcuate path
-        path = self.firepath
-        if path[-1:] == '/':
-            path = path + model_instance.fireid
-        else:
-            path = path + '/' + model_instance.fireid
+        path = _getpath(self.firepath, model_instance.fireid)
         self.adaptor.fire.post(path, payload)
 
     def delete(self, model_instance):
-        """propagate delete in firebase first, then delete a model instance 
+        """propagate delete in firebase first, then delete a model instance.
         """
         self.adaptor.fire.delete(self.firepath, model_instance.fireid)
         self.adaptor.session.delete(model_instance)
         self.adaptor.session.commit()
+
+    def fire_path(self, model_instance):
+        return _getpath(self.firepath, model_instance.fireid)
