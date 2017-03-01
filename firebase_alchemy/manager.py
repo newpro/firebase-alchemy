@@ -1,3 +1,5 @@
+from firebase.firebase import FirebaseApplication
+
 __all__ = [
     'Adaptor',
     'ModelManager'
@@ -6,7 +8,7 @@ __all__ = [
 class Adaptor(object):
     """Manager for one db instance
     """
-    def __init__(self, session, fire):
+    def __init__(self, session, fire_url):
         """Init adaptor
 
         Args:
@@ -14,7 +16,7 @@ class Adaptor(object):
             fire(firebase class): fire operation reference
         """
         self.session = session
-        self.fire = fire
+        self.fire = FirebaseApplication(fire_url)
         self.maps = {} # key: table name, value: firepath
 
     def _map(self, table_name, firepath):

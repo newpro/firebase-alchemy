@@ -3,11 +3,10 @@
 In this example, we are building a data structure of user and chats,
 and efficiently create chats, queue chat(s), and push info into chats.
 """
-# libs
+# sqlalchemy
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, relationship
 from sqlalchemy import Column, Integer, String, ForeignKey, Table, UniqueConstraint, create_engine
-from firebase import firebase
 # native
 from firebase_alchemy.mixin import FireMix
 from firebase_alchemy.manager import Adaptor, ModelManager
@@ -54,11 +53,8 @@ class Chat(Base, FireMix):
 
 Base.metadata.create_all(engine)
 
-# build firebase
-firebase = firebase.FirebaseApplication(FIRE_URL)
-
 # !!! Link managers !!!
-adaptor = Adaptor(session, firebase)
+adaptor = Adaptor(session, FIRE_URL)
 # for each model class that link to firebase, bind a manager
 chat_manager = ModelManager(adaptor, Chat, firepath='chats', validator=['msg', 'who'])
 
