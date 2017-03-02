@@ -155,6 +155,8 @@ chat_manager.delete(chat2) # uncomment this to remove chat
 
 ### Client fetching
 
+For why do client fetching, refer to [Best Practices](#best-practices)
+
 Continue as the example, since the system is build on SQL, it can effectively fetch info from server side and send it to one listening client. 
 
 In this example, Let us say Bill is a client, and he is online to chat. The server can get all bills chat in SQL fashion: 
@@ -166,7 +168,86 @@ bill.chats
 And when bill click on chat2 and start to chat, the server simply tells the client what it should listen to, by fetch the path of chat2 in Firebase. You can use our old friend ChatManager to get the fire:
 
 ```python
-chat_manager.get_path(chat2)
+client_listen_path = chat_manager.get_path(chat2)
 ```
 
-Then the server can send this path to client to listen to. Client can perform various firebase operations as before.
+Then the server can send this path to client to listen to. Client can perform various firebase operations in firebase support JS libraries as before.
+
+## Best Practices
+
+### Servers fetch, clients do read/write
+
+Because we provided push operations, you might tempted to use server to write realtime data to firebase, by using the following client/server workflow, let us call it **workflow 1**:
+
+* Step 1: Client wants to write to a topic
+	* issue write request to server
+* Step 2: Server deals with the request, by running SQL query
+	* Server checks if client is eligible to write in location
+	* Server runs SQL query to find out the location of topic
+	* Server writes to location
+	* Server sends success response to client
+* Step 3: Client write operation success
+
+In this workflow, there are several problems:
+
+* Server has to run query for every client write requests.
+* Server is waiting for the write to finish, either block or context switch in multi-threading, either way waste the precious server resources.
+* All data operations is bottleneck by your server, since your server is normally much less powerful than firebase db server.
+
+**An better alternative workflow** can avoid the problems, let us call it **workflow 2**:
+
+* Step 1: Client wants to **start access** to a topic
+* Step 2: Server prepares for client read/write, by running SQL query
+	* Server runs SQL query to locate the topic
+	* Server check if client is eligible to write in topic
+	* Server fetches the firebase path of the topic
+	* Server send the path as response to client
+* Step 3: Client now can do multiple read/write for a long period of time, directly contact firebase DB without server involvement
+
+The workflow2 looks very good in most of situations, **except one**: If you are required to run some extra server logic before every writes,  you still have to use workflow1. 
+
+For example, if we want to build a amazon store-liked service, charge user with Stripe, and store how many payments are successfully completed in realtime, we write something similar to workflow1 as followings: 
+
+* Step 1: Client send credit card info
+* Step 2: Server charges the user and write to Firebase
+	* Server issue request to Stripe, wait for result
+	* If charge success
+		* fetch path to payment topic
+		* write to path
+		* optionally record this payment in SQL
+	* Server send success to client
+* Step 3: Client payment success
+
+Alternatively, workflow2 has problematic result:
+
+* Step 1: Client is online, request access to payment topic
+* Step 2: Server fetches the path to payment
+* Step 3: Client is free to write to payment DB, without server involvement
+
+As you can see, in step 3, client is free to write to payment db. This is not good. You may be able to argue that it is possible to let client charge by Stripe by itself, and then write to payment if charge success, but since client side code should not be trusted, the security risk is too huge to take. In this **very rare use case**, workflow 1 is a better way to go.
+
+### Security & Authentication
+
+Continue from last best practice, if you choose to use **workflow 1 it is easy to do auth**, since you can check authentication by every writes. Simply use [Firebase admin SDK](https://firebase.google.com/docs/admin/setup), and set [security rules](https://firebase.google.com/docs/database/security/) to deny write to everyone. This makes sure that only your server can write to it. But if you **use workflow 2, not so easy**, since the server sends path to client and client writes, this allows anyone who have the path write to the path. 
+
+This is a major drawback of workflow 2. An interesting detail to point out: for write, firebase-alchemy only push, never set the key by itself, it sets the paths to auto-generated keys that makes the path unguessable for malicious users. But still, it is not good to open write access to everyone. As an example to break this, i can login as a legit user, get the path, and just send the path to my evil friend Eve. Now Eve can write freely to Firebase.
+
+To solve this problem, limit write access only to authenticated users, and use one of the two solutions below:
+
+* Use [firebase drop in authentication solution](https://firebase.google.com/docs/auth/)
+* Use [JWT token](https://firebase.google.com/docs/auth/admin/create-custom-tokens)
+
+Both of the solution are good solution. Use firebase drop in auth makes it really sweet on your side, that u do not need to do much coding, and the auth operation is all handled by firebase. Firebase even provides library to [bind with UI directly](https://github.com/firebase/FirebaseUI-Web). But this also means you would be heavily rely on firebase, which have less control or programmatic access to users info. 
+
+Because the firebase drop in auth already have detailed tutorials, we are only going to talk about JWT for firebase here. The main points of JWT is followings:
+
+* Proves the client has JWT is from your server
+* Send client access rights to Firebase
+
+A workflow example as follows:
+
+* Client requests access to topic
+* Server deals with the request
+	* Fetch user access rights, put into JWT payload as additional claims 
+	* Send JWT back to client
+* Client now can read/write with the JWT depend on the access rights you gives, until token expires
