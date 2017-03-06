@@ -22,13 +22,13 @@ class Adaptor(object):
     def _map(self, table_name, firepath):
         self.maps[table_name] = firepath
 
-def _getpath(fire_path, fire_id):
-    """Give a path and id, merge them together.
+def _append_path(base, extra):
+    """Give a base path and a string, expand the path.
     """
-    if fire_path[-1:] == '/':
-        return path + fire_id
+    if extra[-1:] == '/':
+        return base + extra
     else:
-        return path + '/' + fire_id
+        return base + '/' + extra
 
 class ModelManager(object):
     """DB operations sheilding
@@ -64,7 +64,7 @@ class ModelManager(object):
     def add(self, **args):
         """add a new instance in sql session and firebase, commit change
 
-        Return: new model instance.
+        Return: new sqlalchemy model instance.
         """
         # record in firebase, fetch id
         #TODO: name is not safe, need decoupling
@@ -92,8 +92,16 @@ class ModelManager(object):
             except:
                 raise Exception('Wrong payload format: p:{}, v:{}'.format(payload, self.validator))
         # calcuate path
-        path = _getpath(self.firepath, model_instance.fireid)
+        path = _append_path(self.firepath, model_instance.fireid)
         self.adaptor.fire.post(path, payload)
+
+    def get(self, model_instance, subpath=None):
+        """get data for a model instance. 
+        """
+        path = _append_path(self.firepath, model_instance.fireid)
+        if subpath:
+            path = _append_path(path, subpath)
+        return self.adaptor.fire.get(path)
 
     def delete(self, model_instance):
         """propagate delete in firebase first, then delete a model instance.
@@ -103,4 +111,6 @@ class ModelManager(object):
         self.adaptor.session.commit()
 
     def get_path(self, model_instance):
-        return _getpath(self.firepath, model_instance.fireid)
+        """return the path to firebase instance, normally used for client to listen to.
+        """
+        return _append_path(self.firepath, model_instance.fireid)
