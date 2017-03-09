@@ -17,6 +17,7 @@ class Adaptor(object):
         """
         self.session = session
         self.fire = FirebaseApplication(fire_url)
+        self.url = fire_url
         self.maps = {} # key: table name, value: firepath
 
     def _map(self, table_name, firepath):
@@ -25,10 +26,13 @@ class Adaptor(object):
 def _append_path(base, extra):
     """Give a base path and a string, expand the path.
     """
+    if base[-1:] == '/':
+        base = base[:-1]
+    if extra[0] == '/':
+        extra = extra[1:]
     if extra[-1:] == '/':
-        return base + extra
-    else:
-        return base + '/' + extra
+        extra = extra[:-1]
+    return base + '/' + extra
 
 class ModelManager(object):
     """DB operations sheilding
@@ -99,9 +103,7 @@ class ModelManager(object):
         """get data for a model instance. 
         """
         path = _append_path(self.firepath, model_instance.fireid)
-        if subpath:
-            path = _append_path(path, subpath)
-        return self.adaptor.fire.get(path)
+        return self.adaptor.fire.get(path, subpath)
 
     def delete(self, model_instance):
         """propagate delete in firebase first, then delete a model instance.
@@ -110,7 +112,10 @@ class ModelManager(object):
         self.adaptor.session.delete(model_instance)
         self.adaptor.session.commit()
 
-    def get_path(self, model_instance):
+    def get_path(self, model_instance, full=True):
         """return the path to firebase instance, normally used for client to listen to.
         """
-        return _append_path(self.firepath, model_instance.fireid)
+        firepath = self.firepath
+        if full:
+            firepath  = _append_path(self.adaptor.url, firepath)
+        return _append_path(firepath, model_instance.fireid)
