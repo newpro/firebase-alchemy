@@ -1,6 +1,11 @@
 # firebase-alchemy
 Firebase backed by sqlalchemy for faster query processing
 
+## Status
+
+Dev Branch [![Build Status](https://travis-ci.org/newpro/firebase-alchemy.svg?branch=develop)](https://travis-ci.org/newpro/firebase-alchemy.svg?branch=develop)
+Master Branch [![Build Status](https://travis-ci.org/newpro/firebase-alchemy.svg?branch=master)](https://travis-ci.org/newpro/firebase-alchemy.svg?branch=master)
+
 ## Why firebase-alchemy
 
 Firebase provides robust and relatively easy to use realtime database. But there is some issues regarding to the database. This repo is designed to solve following problems:
