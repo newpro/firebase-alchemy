@@ -121,6 +121,7 @@ def firebase_inspector(request):
     def teardown():
         print '---- firebase cleanup ----'
         client.delete('test', None)
+        client.delete('chat', None)
         print '-- firebase cleanup end --'
 
     request.addfinalizer(teardown)
