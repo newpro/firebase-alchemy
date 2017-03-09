@@ -86,33 +86,45 @@ def adaptor(session):
                    fire_url=FIRE_URL)
 
 @pytest.fixture(scope='function')
-def user_model(_schema, session):
+def user_model(request, _schema, session):
     """return a user table and clean up after myself
     """
     table = _schema['user']
-    yield table
-    session.query(table).delete()
-    session.commit()
+
+    def teardown():
+        session.query(table).delete()
+        session.commit()
+
+    request.addfinalizer(teardown)
+    return table
 
 @pytest.fixture(scope='function')
-def chat_model(_schema, session):
+def chat_model(request, _schema, session):
     """return a user table and clean up after myself
     """
     table = _schema['chat']
-    yield table
-    session.query(table).delete()
-    session.commit()
+
+    def teardown():
+        session.query(table).delete()
+        session.commit()
+
+    request.addfinalizer(teardown)
+    return table
 
 @pytest.fixture(scope='session')
-def firebase_inspector():
+def firebase_inspector(request):
     """a independent inspector that clean after itself
     """
     from firebase import FirebaseApplication
     client = FirebaseApplication(FIRE_URL)
-    yield client
-    print '---- firebase cleanup ----'
-    client.delete('test', None)
-    print '-- firebase cleanup end --'
+
+    def teardown():
+        print '---- firebase cleanup ----'
+        client.delete('test', None)
+        print '-- firebase cleanup end --'
+
+    request.addfinalizer(teardown)
+    return client
 
 @pytest.fixture(scope='module')
 def fire_url():
