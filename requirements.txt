@@ -1,4 +1,5 @@
 # sql support
+psycopg2
 SQLAlchemy
 
 # firebase rest support: https://github.com/ozgur/python-firebase
