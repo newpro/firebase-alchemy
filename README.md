@@ -31,6 +31,8 @@ Firebase does not provide integration with relational database, and a lot of tim
 
 ### The solution
 
+[![structure](https://github.com/newpro/firebase-alchemy/blob/develop/docs/structure.png)
+
 Firebase-alchemy is designed to solve all problems by build on both sql and firebase, utilize both of their advantages: 
 
 * Process query, structure data, build relationship, enforce integrity by SQL, since it is the best of it.
@@ -45,7 +47,11 @@ This repo is build on libraries:
 
 In this tutorial, we are going to build a database that store and process user chats. It is required to have basic knowledge about SQLAlchemy. If you do not, please walk through [its basic tutorial](http://docs.sqlalchemy.org/en/latest/orm/tutorial.html). The complete runnable code is in [example.py](./example.py).
 
-The objectives of the database is to store user info, chat groups, and chats, let client fetch more quickly and makes it easily expandable for more functionalities. 
+The objectives of the database is to store user info, chat groups, and chats, let client fetch more quickly and makes it easily expandable for more functionalities.
+
+An graph overview can help u to understand the structure in this case:
+
+[![example](https://github.com/newpro/firebase-alchemy/blob/develop/docs/example.png)
 
 ### Data Structure & Operations
 
@@ -179,6 +185,10 @@ client_listen_path = chat_manager.get_path(chat2)
 
 Then the server can send this path to client to listen to. Client can perform various firebase operations in firebase support JS libraries as before.
 
+In a specific case. The detail of fetching a listening document will be simular to this graph:
+
+[![example_usecase](https://github.com/newpro/firebase-alchemy/blob/develop/docs/example_usecase.png)
+
 ## Best Practices
 
 ### Servers fetch, clients do read/write
@@ -200,7 +210,7 @@ In this workflow, there are several problems:
 * Server is waiting for the write to finish, either block or context switch in multi-threading, either way waste the precious server resources.
 * All data operations is bottleneck by your server, since your server is normally much less powerful than firebase db server.
 
-**An better alternative workflow** can avoid the problems, let us call it **workflow 2**:
+**A better alternative workflow** can avoid the problems, let us call it **workflow 2**:
 
 * Step 1: Client wants to **start access** to a topic
 * Step 2: Server prepares for client read/write, by running SQL query
