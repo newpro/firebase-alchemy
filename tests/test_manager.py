@@ -1,6 +1,6 @@
 import pytest
 from firebase_alchemy.mixin import FireMix
-from firebase_alchemy.manager import Adaptor, ModelManager
+from firebase_alchemy.manager import Adaptor, ModelManager, SyncManager
 
 def test_chat_manager_basic(user_model,
                             chat_model,
@@ -107,16 +107,70 @@ def test_manager_firebase_branch_auto_adaption(user_model,
     aaron = User(name='aaron')
     session.add(aaron)
     session.commit()
-    assert len(session.query(User).all()) == 1
+    assert session.query(User).first().name == 'aaron'
     # ---- CHAT MANAGER TEST ----
     chat_manager = ModelManager(adaptor,
                                 Chat,
                                 validator=['msg', 'who'])
     chat1 = chat_manager.add(name='Sunday Picnic')
     # verify wrote into targetted path
-    assert firebase_inspector.get(test_path, None) != 1
+    assert len(firebase_inspector.get(test_path, None)) == 1
     payload = {'msg': 'test msg',
                'who': aaron.name}    
     chat_manager.push(chat1, payload)
-    # verify wrote correct data into two level down
-    assert firebase_inspector.get(test_path, None) != 1
+    # verify wrote correct data wrote into two level down
+    data = firebase_inspector.get(test_path, None)
+    assert len(data.keys()) == 1
+    level1_key = data.keys()[0]
+    assert len(data[level1_key].keys()) == 1
+    level2_key = data[level1_key].keys()[0]
+    server_data = data[level1_key][level2_key]
+    assert len(server_data.keys()) == len(payload.keys())
+    payload_keys = payload.keys()
+    for key in payload.keys():
+        assert server_data[key] == payload[key]
+
+def test_sync_manager_basic(dummy_model,
+                            session,
+                            adaptor,
+                            firebase_inspector,
+                            fire_url):
+    Table = dummy_model
+    test_path = 'test'
+    assert len(session.query(Table).all()) == 0
+    assert firebase_inspector.get(test_path, None) == None
+    # -- Sync Manager test --
+    sync_manager = SyncManager(adaptor, Table, firepath=test_path)
+    payload = {
+        'data1': 'qwert',
+        'data2': 'asdfg'
+    }
+    # -- add function test --
+    model_instance = sync_manager.add(sql_data='123456', payload=payload)
+    data = firebase_inspector.get(test_path, None)
+    assert len(data.keys()) == 1
+    server_data = data[data.keys()[0]]
+    assert len(payload.keys()) == len(server_data.keys())
+    for key in payload.keys():
+        assert payload[key] == server_data[key]
+    # -- set function test, with entry param --
+    payload['data1'] = '12345'
+    sync_manager.set(model_instance, payload['data1'], entry='data1')
+    data = firebase_inspector.get(test_path, None)
+    assert len(data.keys()) == 1
+    server_data = data[data.keys()[0]]
+    assert len(payload.keys()) == len(server_data.keys())
+    for key in payload.keys():
+        assert payload[key] == server_data[key]
+    # -- set function test, default params --
+    new_payload = {
+        'data3': '54321',
+        'data4': '09876'
+    }
+    sync_manager.set(model_instance, payload)
+    data = firebase_inspector.get(test_path, None)
+    assert len(data.keys()) == 1
+    server_data = data[data.keys()[0]]
+    assert len(payload.keys()) == len(server_data.keys())
+    for key in payload.keys():
+        assert payload[key] == server_data[key]

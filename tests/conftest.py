@@ -58,9 +58,38 @@ def _schema(engine):
         users = relationship('User',
                              secondary=user_chats,
                              lazy='dynamic')
+
+    class Dummy(Base, FireMix):
+        __tablename__ = 'dummys'
+        id = Column(Integer, primary_key=True)
+        sql_data = Column(String)
+
     # setup
     Base.metadata.create_all(engine)
-    return {'user': User, 'chat': Chat}
+    return {'user': User, 'chat': Chat, 'dummy': Dummy}
+
+@pytest.fixture(scope='module')
+def fire_url():
+    """return fireurl for path testing
+    """
+    return FIRE_URL
+
+# ---- Function Resources ----
+@pytest.fixture(scope='function')
+def firebase_inspector(request):
+    """a independent inspector that clean after itself
+    """
+    from firebase import FirebaseApplication
+    client = FirebaseApplication(FIRE_URL)
+
+    def teardown():
+        print '---- firebase cleanup ----'
+        client.delete('test', None)
+        client.delete('chat', None)
+        print '-- firebase cleanup end --'
+
+    request.addfinalizer(teardown)
+    return client
 
 @pytest.fixture(scope='function')
 def session(engine, request):
@@ -111,24 +140,15 @@ def chat_model(request, _schema, session):
     request.addfinalizer(teardown)
     return table
 
-@pytest.fixture(scope='session')
-def firebase_inspector(request):
-    """a independent inspector that clean after itself
+@pytest.fixture(scope='function')
+def dummy_model(request, _schema, session):
+    """return dummy table 
     """
-    from firebase import FirebaseApplication
-    client = FirebaseApplication(FIRE_URL)
+    table = _schema['dummy']
 
     def teardown():
-        print '---- firebase cleanup ----'
-        client.delete('test', None)
-        client.delete('chat', None)
-        print '-- firebase cleanup end --'
+        session.query(table).delete()
+        session.commit()
 
     request.addfinalizer(teardown)
-    return client
-
-@pytest.fixture(scope='module')
-def fire_url():
-    """return fireurl for path testing
-    """
-    return FIRE_URL
+    return table

@@ -2,7 +2,8 @@ from firebase.firebase import FirebaseApplication
 
 __all__ = [
     'Adaptor',
-    'ModelManager'
+    'ModelManager',
+    'SyncManager'
 ]
 
 class Adaptor(object):
@@ -148,7 +149,7 @@ class SyncManager(AbstractManager):
     for example: one person in db response to a firebase document about its state.
     """
     def __init__(self, *args, **kwargs):
-        super(ModelManager, self).__init__(*args, **kwargs)
+        super(SyncManager, self).__init__(*args, **kwargs)
 
     def add(self, payload, **model_args):
         """add a db entry and a payload as its firebase state, commit changes
@@ -163,12 +164,12 @@ class SyncManager(AbstractManager):
             self._validate(payload=data, key=entry)
             self.adaptor.fire.put(url=self._path(model_instance),
                                   name=entry,
-                                  payload=data)
+                                  data=data)
         else:
             self._validate(payload=data)
             self.adaptor.fire.put(url=self.firepath,
                                   name=model_instance.fireid,
-                                  payload=data)
+                                  data=data)
 
 class ModelManager(AbstractManager):
     """ModelManager use to build and maintain one to multiple relationship
