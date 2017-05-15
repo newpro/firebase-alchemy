@@ -63,6 +63,7 @@ def _schema(engine):
         __tablename__ = 'dummys'
         id = Column(Integer, primary_key=True)
         sql_data = Column(String)
+        extra = Column(String)
 
     # setup
     Base.metadata.create_all(engine)

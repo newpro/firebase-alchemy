@@ -20,12 +20,21 @@ def test_chat_manager_basic(user_model,
     session.commit()
     assert len(session.query(User).all()) == 1
     # ---- CHAT MANAGER TEST ----
+    some_data = 'Sunday Picnic'
     chat_manager = ModelManager(adaptor,
                                 Chat,
                                 firepath=test_path,
                                 validator=['msg', 'who'])
-    chat1 = chat_manager.add(name='Sunday Picnic')
+    chat1 = chat_manager.add(name=some_data)
+    # Check if write into sql correctly
+    assert len(session.query(Chat).all()) == 1
+    assert (session.query(Chat).first().name) == some_data
+    # test if return correctly
+    assert isinstance(chat1, Chat)
+    assert chat1.name == some_data
+    # test if write into firebase
     assert len(firebase_inspector.get(test_path, None)) == 1
+    # ---- Associate tables tests ----
     chat1.users.append(aaron)
     session.commit()
     assert aaron in chat1.users
@@ -147,7 +156,15 @@ def test_sync_manager_basic(dummy_model,
         'data2': 'asdfg'
     }
     # -- add function test --
-    model_instance = sync_manager.add(sql_data='123456', payload=payload)
+    some_data = '123456'
+    model_instance = sync_manager.add(sql_data=some_data, payload=payload)
+    # test if sql write correctly
+    assert len(session.query(Table).all()) == 1
+    assert (session.query(Table).first().sql_data) == some_data
+    # test if return correctly
+    assert isinstance(model_instance, Table)
+    assert model_instance.sql_data == some_data
+    # test if write to firebase correctly
     data = firebase_inspector.get(test_path, None)
     assert len(data.keys()) == 1
     server_data = data[data.keys()[0]]
@@ -189,7 +206,7 @@ def test_sync_manager_sql_failure(dummy_model,
                                   adaptor,
                                   firebase_inspector,
                                   fire_url):
-    """Test if sql failes to write, firebase records can be removed
+    """Test if sql failes to write, firebase record has been removed
     """
     Table = dummy_model
     test_path = 'test'
@@ -314,7 +331,7 @@ def test_sync_manager_uniqueness_return(dummy_model,
                                         firebase_inspector,
                                         fire_url):
     """test sync manager behavior with uniqueness filter, with unqiue silence
-        """
+    """
     Table = dummy_model
     test_path = 'test'
     assert len(session.query(Table).all()) == 0
@@ -325,21 +342,65 @@ def test_sync_manager_uniqueness_return(dummy_model,
     payload = {
         'a': 'whatever'
     }
+    data_count = 0
     # push something first
     m1 = sync_manager.add(sql_data='123', payload=payload)
-    assert len(session.query(Table).all()) == 1
-    assert len(firebase_inspector.get(test_path, None)) == 1
+    data_count += 1
+    assert len(session.query(Table).all()) == data_count
+    assert len(firebase_inspector.get(test_path, None)) == data_count
     # push a conflict entry
     m2 = sync_manager.add(sql_data=m1.sql_data, payload=payload)
     # verify old data is returned
     assert m2.id == m1.id
     # verify no additional data write into both sql an firebase
-    assert len(session.query(Table).all()) == 1
-    assert len(firebase_inspector.get(test_path, None)) == 1
+    assert len(session.query(Table).all()) == data_count
+    assert len(firebase_inspector.get(test_path, None)) == data_count
     # test can push a non-conflict entry
     m3 = sync_manager.add(sql_data='124', payload=payload)
+    data_count += 1
     assert m3.id
     assert m3.id != m1.id
     assert m3.sql_data == '124'
-    assert len(session.query(Table).all()) == 2
-    assert len(firebase_inspector.get(test_path, None)) == 2
+    assert len(session.query(Table).all()) == data_count
+    assert len(firebase_inspector.get(test_path, None)) == data_count
+
+def test_sync_manager_uniqueness_on_multiple_keys(dummy_model,
+                                                  session,
+                                                  adaptor,
+                                                  firebase_inspector,
+                                                  fire_url):
+    """test sync manager behavior with uniqueness filter, with unqiue silence
+    """
+    Table = dummy_model
+    test_path = 'test'
+    assert len(session.query(Table).all()) == 0
+    assert firebase_inspector.get(test_path, None) == None
+    
+    sync_manager = SyncManager(adaptor, Table, firepath=test_path,
+                               unique_constraints=['sql_data', 'extra'],
+                               unique_silence=False)
+    payload = {
+        'a': 'whatever'
+    }
+    data_count = 0
+    # test deny pushing a missed constraint
+    with pytest.raises(Exception):
+        m1 = sync_manager.add(sql_data='123', payload=payload)
+    assert len(session.query(Table).all()) == 0
+    assert firebase_inspector.get(test_path, None) == None
+    # push something first
+    m1 = sync_manager.add(sql_data='1', extra='one', payload=payload)
+    data_count += 1
+    assert len(session.query(Table).all()) == data_count
+    assert len(firebase_inspector.get(test_path, None)) == data_count
+    # test push a non-conflict entry that overlap one key
+    m2 = sync_manager.add(sql_data=m1.sql_data, extra='two', payload=payload)
+    data_count += 1
+    assert len(session.query(Table).all()) == data_count
+    assert len(firebase_inspector.get(test_path, None)) == data_count
+    # push a conflict entry
+    with pytest.raises(UniqueError):
+        m3 = sync_manager.add(sql_data=m1.sql_data, extra=m1.extra, payload=payload)
+    # verify no additional data write into both sql an firebase
+    assert len(session.query(Table).all()) == data_count
+    assert len(firebase_inspector.get(test_path, None)) == data_count
