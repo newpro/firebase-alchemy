@@ -1,6 +1,7 @@
 import pytest
 from firebase_alchemy.mixin import FireMix
 from firebase_alchemy.manager import Adaptor, ModelManager, SyncManager
+from firebase_alchemy.exceptions import SQLError
 
 def test_chat_manager_basic(user_model,
                             chat_model,
@@ -182,3 +183,28 @@ def test_sync_manager_basic(dummy_model,
     for key in payload.keys():
         assert payload[key] == server_data[key]
     assert server_data['new_entry'] == 'new_data'
+
+def test_sync_manager_sql_failure(dummy_model,
+                                  session,
+                                  adaptor,
+                                  firebase_inspector,
+                                  fire_url):
+    """Test if sql failes to write, firebase records can be removed
+    """
+    Table = dummy_model
+    test_path = 'test'
+    assert len(session.query(Table).all()) == 0
+    assert firebase_inspector.get(test_path, None) == None
+    # -- Sync Manager test --
+    sync_manager = SyncManager(adaptor, Table, firepath=test_path)
+    payload = {
+        'data1': 'qwert',
+        'data2': 'asdfg'
+    }
+    # -- add function test --
+    with pytest.raises(SQLError):
+        model_instance = sync_manager.add(unknow_entry='123456', payload=payload)
+    # check to see if firebase record is removed
+    assert firebase_inspector.get(test_path, None) == None
+    # check to see if nothing wrote into sql
+    assert len(session.query(Table).all()) == 0
