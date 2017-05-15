@@ -1,4 +1,5 @@
 from firebase.firebase import FirebaseApplication
+from exceptions import SQLError, ValidationError
 
 __all__ = [
     'Adaptor',
@@ -71,7 +72,7 @@ class AbstractManager(object):
         else: # no firepath
             # user default from mixin
             if not model_cls.__firepath__:
-                raise Exception('No firepath available')
+                raise Exception('Config: No firepath available')
             self.firepath = model_cls.__firepath__
         # record mapping
         self.adaptor._map(self.model_cls.__name__.lower(),
@@ -108,12 +109,12 @@ class AbstractManager(object):
                         if (not (key in payload)) or (not isinstance(payload[key], self.validator[key])):
                             raise Exception()
             except:
-                raise Exception('Wrong payload format: p:{}, v:{}'.format(payload, self.validator))
+                raise ValidationError('Wrong payload format: p:{}, v:{}'.format(payload, self.validator))
         else:
             # only validate for key pair
             if isinstance(self.validator, dict):
                 if key in self.validator and (not isinstance(payload, self.validator[key])):
-                    raise Exception('Wrong value format for key. K: {}, format: {}'.format(payload,
+                    raise ValidationError('Wrong value format for key. K: {}, format: {}'.format(payload,
                                                                                            self.validator[key]))
 
     def _build(self, init_payload=True, **model_args):
@@ -122,11 +123,19 @@ class AbstractManager(object):
 
         Optional: init_payload, inject initial data into space holder
         """
+        if init_payload is not True: # need validation
+            self._validate(init_payload)
         fireid = self.adaptor.fire.post(url=self.firepath,
                                          data=init_payload)['name']
-        return self.adaptor._write(fireid=fireid,
-                                   model_cls=self.model_cls,
-                                   **model_args)
+        try:
+            new_instance = self.adaptor._write(fireid=fireid,
+                                               model_cls=self.model_cls,
+                                               **model_args)
+        except Exception, e: # fail to write to sql
+            # remove firebase record
+            self.adaptor.fire.delete(self.firepath, fireid)
+            raise SQLError('Failure writing to SQL: '+ str(e))
+        return new_instance
 
     # -- Available operations for all managers --
     def delete(self, model_instance):
@@ -199,6 +208,7 @@ class ModelManager(AbstractManager):
                                payload)
 
     def get_path(self, model_instance, full=True):
-        """return the path to firebase instance, normally used for client to listen to.
+        """return the path to firebase instance,
+        normally uses for provide path to web client to listen to.
         """
         return self._path(model_instance, full=full)
