@@ -1,5 +1,5 @@
 from firebase.firebase import FirebaseApplication
-from exceptions import SQLError, ValidationError
+from exceptions import SQLError, ValidationError, UniqueError
 
 __all__ = [
     'Adaptor',
@@ -48,12 +48,22 @@ def _append_paths(base, extra):
 class AbstractManager(object):
     """General manager
     """
-    def __init__(self, adaptor, model_cls, firepath=None, validator=None):
-        """Init
+    def __init__(self, adaptor, model_cls,
+                 firepath=None,
+                 validator=None,
+                 unique_constraints=[],
+                 unique_silence=True):
+        """Abstracted class to all managers
 
         Args:
             model(a sqlalchemy model with mixin): model class
             firepath(a string or list): the location should be insert for firebase
+            validator(a list of dict): a list of key that requires to validate the format of firebase data
+            unique_filter_fn(function ptr): a function that will can at runtime.
+               If the function return None, assume no unique conflict.
+               If the function return something, assume it is unique conflect, instead of build a new
+               instance, it will be returned or raise unique exception.
+            unique_silence(Boolean): indicates if exception should be raised or silent when unique happened. 
         """
         self.adaptor = adaptor
         self.model_cls = model_cls
@@ -77,6 +87,19 @@ class AbstractManager(object):
         # record mapping
         self.adaptor._map(self.model_cls.__name__.lower(),
                           self.firepath)
+        try:
+            iter(unique_constraints)
+        except:
+            raise Exception('Unique constraints has to be iterable')
+        self.unique_constraints = unique_constraints
+        self.unique_silence = unique_silence
+
+    def _force_mi_match(self, model_instance):
+        """force the model instance passed in as an
+        instance of managed model
+        """
+        if not isinstance(model_instance, self.model_cls):
+            raise Exception('Critical: model instance does not match class')
 
     def _path(self, model_instance, full=False):
         """give a model instance, retrive the firepath of it
@@ -125,8 +148,27 @@ class AbstractManager(object):
         """
         if init_payload is not True: # need validation
             self._validate(init_payload)
+        # -- check on unique constricts --
+        if self.unique_constraints:
+            # check constraints are also in args, and build filter args
+            filter_args = {}
+            for c in self.unique_constraints:
+                if not (c in model_args):
+                    raise Exception('constraints can not be applied: not in model construction args')
+                filter_args[c] = model_args[c]
+            if filter_args:
+                res = self.adaptor.session.query(self.model_cls).filter_by(**filter_args).first()
+                if res is not None: # unique conflict
+                    if not self.unique_silence:
+                        raise UniqueError('Not unique')
+                    else:
+                        if init_payload:
+                            print '-- WARNING --: Payload ignored due to unique'
+                        return res
+        # -- Write to Firebase --
         fireid = self.adaptor.fire.post(url=self.firepath,
-                                         data=init_payload)['name']
+                                        data=init_payload)['name']
+        # -- Write to SQL --
         try:
             new_instance = self.adaptor._write(fireid=fireid,
                                                model_cls=self.model_cls,
@@ -141,6 +183,7 @@ class AbstractManager(object):
     def delete(self, model_instance):
         """propagate delete in firebase first, then delete a model instance.
         """
+        self._force_mi_match(model_instance)
         self.adaptor.fire.delete(self.firepath, model_instance.fireid)
         self.adaptor.session.delete(model_instance)
         self.adaptor.session.commit()
@@ -148,6 +191,7 @@ class AbstractManager(object):
     def get(self, model_instance, subpath=None):
         """get data for a model instance. 
         """
+        self._force_mi_match(model_instance)
         return self.adaptor.fire.get(self._path(model_instance),
                                      subpath)
 
@@ -168,6 +212,7 @@ class SyncManager(AbstractManager):
     def set(self, model_instance, data, entry=None):
         """Completely overwrite the existing firebase entry for the model_instance
         """
+        self._force_mi_match(model_instance)
         # extract fire id and set data
         if entry:
             self._validate(payload=data, key=entry)
@@ -202,6 +247,7 @@ class ModelManager(AbstractManager):
     def push(self, model_instance, payload):
         """push a piece of info in firebase based on model instance.
         """
+        self._force_mi_match(model_instance)
         # validate the payload
         self._validate(payload)
         self.adaptor.fire.post(self._path(model_instance),
@@ -211,4 +257,5 @@ class ModelManager(AbstractManager):
         """return the path to firebase instance,
         normally uses for provide path to web client to listen to.
         """
+        self._force_mi_match(model_instance)
         return self._path(model_instance, full=full)

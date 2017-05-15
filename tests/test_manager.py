@@ -1,7 +1,7 @@
 import pytest
 from firebase_alchemy.mixin import FireMix
 from firebase_alchemy.manager import Adaptor, ModelManager, SyncManager
-from firebase_alchemy.exceptions import SQLError
+from firebase_alchemy.exceptions import SQLError, UniqueError
 
 def test_chat_manager_basic(user_model,
                             chat_model,
@@ -208,3 +208,138 @@ def test_sync_manager_sql_failure(dummy_model,
     assert firebase_inspector.get(test_path, None) == None
     # check to see if nothing wrote into sql
     assert len(session.query(Table).all()) == 0
+
+# ---- Unique constrictions testings ----
+def test_model_manager_uniqueness_exception(dummy_model,
+                                 session,
+                                 adaptor,
+                                 firebase_inspector,
+                                 fire_url):
+    Table = dummy_model
+    test_path = 'test'
+    assert len(session.query(Table).all()) == 0
+    assert firebase_inspector.get(test_path, None) == None
+    
+    model_manager = ModelManager(adaptor, Table, firepath=test_path,
+                                 unique_constraints=['sql_data'],
+                                 unique_silence=False)
+    # push something first
+    m1 = model_manager.add(sql_data='123')
+    assert len(session.query(Table).all()) == 1
+    assert len(firebase_inspector.get(test_path, None)) == 1
+    # push a conflict entry
+    with pytest.raises(UniqueError):
+        model_manager.add(sql_data=m1.sql_data)
+    # verify no additional data write into both sql an firebase
+    assert len(session.query(Table).all()) == 1
+    assert len(firebase_inspector.get(test_path, None)) == 1
+    # test can push a non-conflict entry
+    m3 = model_manager.add(sql_data='124')
+    assert m3.id
+    assert m3.id != m1.id
+    assert m3.sql_data == '124'
+    assert len(session.query(Table).all()) == 2
+    assert len(firebase_inspector.get(test_path, None)) == 2
+
+def test_model_manager_uniqueness_return(dummy_model,
+                                 session,
+                                 adaptor,
+                                 firebase_inspector,
+                                 fire_url):
+    Table = dummy_model
+    test_path = 'test'
+    assert len(session.query(Table).all()) == 0
+    assert firebase_inspector.get(test_path, None) == None
+    
+    model_manager = ModelManager(adaptor, Table, firepath=test_path,
+                                 unique_constraints=['sql_data'])
+    # push something first
+    m1 = model_manager.add(sql_data='123')
+    assert len(session.query(Table).all()) == 1
+    assert len(firebase_inspector.get(test_path, None)) == 1
+    # push a conflict entry
+    m2 = model_manager.add(sql_data=m1.sql_data)
+    # verify old instance got returned
+    assert m2.id == m1.id
+    # verify no additional data write into both sql an firebase
+    assert len(session.query(Table).all()) == 1
+    assert len(firebase_inspector.get(test_path, None)) == 1
+    # test can push a non-conflict entry
+    m3 = model_manager.add(sql_data='124')
+    assert m3.id
+    assert m3.id != m1.id
+    assert m3.sql_data == '124'
+    assert len(session.query(Table).all()) == 2
+    assert len(firebase_inspector.get(test_path, None)) == 2
+
+def test_sync_manager_uniqueness_exception(dummy_model,
+                                 session,
+                                 adaptor,
+                                 firebase_inspector,
+                                 fire_url):
+    """test sync manager behavior with uniqueness filter
+    """
+    Table = dummy_model
+    test_path = 'test'
+    assert len(session.query(Table).all()) == 0
+    assert firebase_inspector.get(test_path, None) == None
+    
+    sync_manager = SyncManager(adaptor, Table, firepath=test_path,
+                               unique_constraints=['sql_data'],
+                               unique_silence=False)
+    payload = {
+        'a': 'whatever'
+    }
+    # push something first
+    m1 = sync_manager.add(sql_data='123', payload=payload)
+    assert len(session.query(Table).all()) == 1
+    assert len(firebase_inspector.get(test_path, None)) == 1
+    # push a conflict entry
+    with pytest.raises(UniqueError):
+        sync_manager.add(sql_data=m1.sql_data, payload=payload)
+    # verify no additional data write into both sql an firebase
+    assert len(session.query(Table).all()) == 1
+    assert len(firebase_inspector.get(test_path, None)) == 1
+    # test can push a non-conflict entry
+    m3 = sync_manager.add(sql_data='124', payload=payload)
+    assert m3.id
+    assert m3.id != m1.id
+    assert m3.sql_data == '124'
+    assert len(session.query(Table).all()) == 2
+    assert len(firebase_inspector.get(test_path, None)) == 2
+
+def test_sync_manager_uniqueness_return(dummy_model,
+                                        session,
+                                        adaptor,
+                                        firebase_inspector,
+                                        fire_url):
+    """test sync manager behavior with uniqueness filter, with unqiue silence
+        """
+    Table = dummy_model
+    test_path = 'test'
+    assert len(session.query(Table).all()) == 0
+    assert firebase_inspector.get(test_path, None) == None
+    
+    sync_manager = SyncManager(adaptor, Table, firepath=test_path,
+                               unique_constraints=['sql_data'])
+    payload = {
+        'a': 'whatever'
+    }
+    # push something first
+    m1 = sync_manager.add(sql_data='123', payload=payload)
+    assert len(session.query(Table).all()) == 1
+    assert len(firebase_inspector.get(test_path, None)) == 1
+    # push a conflict entry
+    m2 = sync_manager.add(sql_data=m1.sql_data, payload=payload)
+    # verify old data is returned
+    assert m2.id == m1.id
+    # verify no additional data write into both sql an firebase
+    assert len(session.query(Table).all()) == 1
+    assert len(firebase_inspector.get(test_path, None)) == 1
+    # test can push a non-conflict entry
+    m3 = sync_manager.add(sql_data='124', payload=payload)
+    assert m3.id
+    assert m3.id != m1.id
+    assert m3.sql_data == '124'
+    assert len(session.query(Table).all()) == 2
+    assert len(firebase_inspector.get(test_path, None)) == 2
