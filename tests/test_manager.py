@@ -174,3 +174,11 @@ def test_sync_manager_basic(dummy_model,
     assert len(payload.keys()) == len(server_data.keys())
     for key in payload.keys():
         assert payload[key] == server_data[key]
+    # -- set function test, set a new entry --
+    sync_manager.set(model_instance, 'new_data', entry='new_entry')
+    data = firebase_inspector.get(test_path, None)
+    server_data = data[data.keys()[0]]
+    assert (len(payload.keys())  + 1) == (len(server_data.keys()))
+    for key in payload.keys():
+        assert payload[key] == server_data[key]
+    assert server_data['new_entry'] == 'new_data'
