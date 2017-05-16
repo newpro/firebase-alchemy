@@ -195,6 +195,13 @@ class AbstractManager(object):
         return self.adaptor.fire.get(self._path(model_instance),
                                      subpath)
 
+    def get_path(self, model_instance, full=True):
+        """return the path to firebase instance,
+        normally uses for provide path to web client to listen to.
+        """
+        self._force_mi_match(model_instance)
+        return self._path(model_instance, full=full)
+
 class SyncManager(AbstractManager):
     """Sync manager use to build and maintain one to one relationship
     between one sql-alchemy row and one firebase document.
@@ -253,9 +260,3 @@ class ModelManager(AbstractManager):
         self.adaptor.fire.post(self._path(model_instance),
                                payload)
 
-    def get_path(self, model_instance, full=True):
-        """return the path to firebase instance,
-        normally uses for provide path to web client to listen to.
-        """
-        self._force_mi_match(model_instance)
-        return self._path(model_instance, full=full)
